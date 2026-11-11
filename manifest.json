@@ -1,0 +1,17 @@
+{
+  "name": "Squishy Squeeze",
+  "short_name": "Squishy",
+  "description": "Squeeze squishies, collect sparkles, unlock new squishies!",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffe3f1",
+  "theme_color": "#ffd6ea",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
