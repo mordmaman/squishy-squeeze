@@ -45,6 +45,7 @@
   #rates { font-size: clamp(12px, 2vmin, 15px); opacity: 0.85; margin-top: 2px; }
 
   #corner { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; z-index: 3; }
+  @media (max-width: 720px) { #corner { flex-direction: column; } }
   #corner button {
     width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--soft);
     background: rgba(255,255,255,0.85); font-size: 19px; padding: 0;
@@ -153,6 +154,14 @@
   .btn.alt { background: #fbeef6; color: var(--ink); box-shadow: 0 4px 0 #f0c3da; }
   .btn.danger { background: #ff6b6b; box-shadow: 0 4px 0 #c84545; }
   .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #b52c6c; }
+  #pauseScreen { position: fixed; inset: 0; z-index: 19; background: rgba(74,47,85,0.45);
+    display: flex; align-items: center; justify-content: center; padding: 14px; }
+  #pauseScreen .card {
+    background: #fff; border-radius: 24px; border: 3px solid var(--soft); box-shadow: 0 8px 0 rgba(155,79,134,0.25);
+    padding: 18px 22px 22px; width: 100%; max-width: 380px; text-align: center; animation: pop 0.3s ease-out;
+  }
+  #pauseScreen h2 { margin: 4px 0 8px; font-size: 32px; color: var(--pink); }
+  #pauseScreen p { margin: 6px 0; font-size: 17px; }
   .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0; font-size: 17px; }
 </style>
 </head>
@@ -166,7 +175,7 @@
       <div id="countLabel">sparkles</div>
       <div id="rates"><span id="ps"></span> · <span id="pq"></span></div>
     </div>
-    <div id="corner"><button id="soundBtn" aria-label="Sound">🔊</button><button id="setBtn" aria-label="Settings">⚙️</button></div>
+    <div id="corner"><button id="pauseBtn" aria-label="Pause">⏸️</button><button id="soundBtn" aria-label="Sound">🔊</button><button id="setBtn" aria-label="Settings">⚙️</button></div>
     <button id="golden" class="hidden" aria-label="Golden sparkle">🌟</button>
     <div id="frenzy" class="hidden"></div>
     <div id="toasts"></div>
@@ -181,6 +190,12 @@
     <div id="panel"></div>
   </aside>
 </div>
+<div id="pauseScreen" class="hidden"><div class="card">
+  <h2>Paused 😴</h2>
+  <p>Your squishies are having a little nap.</p>
+  <p>Everything stops until you come back, even the helpers!</p>
+  <button class="btn" id="resumeBtn">Keep squishing!</button>
+</div></div>
 <div id="modal" class="hidden"><div class="card" id="modalCard"></div></div>
 
 <script>
@@ -255,7 +270,7 @@ const TROPHIES = [
 const SAVE_KEY = 'squishy.save.v1';
 const fresh = () => ({
   sparkles: 0, total: 0, squeezes: 0, owned: HELPERS.map(() => 0), ups: {}, sel: 0,
-  trophies: {}, golden: 0, name: '', sound: true, qty: 1, seen: 1, welcomed: false, last: Date.now(),
+  trophies: {}, golden: 0, name: '', sound: true, qty: 1, seen: 1, welcomed: false, last: Date.now(), paused: false,
 });
 let G = fresh();
 function loadGame() {
@@ -648,6 +663,8 @@ let keyDown = false;
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
   if ((e.key === ' ' || e.key === 'Enter') && !el('modal').classList.contains('hidden')) return;
+  if ((e.key === 'p' || e.key === 'P' || e.key === 'Escape') && el('modal').classList.contains('hidden')) { e.preventDefault(); G.paused ? resumeGame() : pauseGame(); return; }
+  if (G.paused) return;
   if (e.key === ' ' && !e.repeat) { e.preventDefault(); initAudio(); keyDown = true; squeezeAt(CX + rand(-R * 0.3, R * 0.3), CY - R * 0.3); }
 });
 window.addEventListener('keyup', e => { if (e.key === ' ' && keyDown) { keyDown = false; sq.wobA = 0.05; sq.wobT = 0; } });
@@ -825,6 +842,7 @@ function settingsModal() {
   });
 }
 function offlineEarnings() {
+  if (G.paused) return;
   const secs = (Date.now() - G.last) / 1000;
   if (secs < 30) return;
   const v = baseRate() * Math.min(secs, 8 * 3600) * 0.5;
@@ -960,17 +978,37 @@ function checkTrophies() {
 let last = performance.now(), uiT = 0, slowT = 0, saveT = 5;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now; time += dt;
-  const ps = perSecond();
-  if (ps > 0) earn(ps * dt);
-  frenzyT = Math.max(0, frenzyT - dt);
-  updateSquishy(dt, ps);
-  updateGolden(dt);
+  if (!G.paused) {
+    const ps = perSecond();
+    if (ps > 0) earn(ps * dt);
+    frenzyT = Math.max(0, frenzyT - dt);
+    updateSquishy(dt, ps);
+    updateGolden(dt);
+  }
   draw();
   uiT -= dt; if (uiT <= 0) { uiT = 0.15; updateHUD(); refreshShop(); }
   slowT -= dt; if (slowT <= 0) { slowT = 0.5; checkUnlocks(); checkTrophies(); }
   saveT -= dt; if (saveT <= 0) { saveT = 5; saveGame(); }
   requestAnimationFrame(frame);
 }
+
+// ---------- pause ----------
+function showPaused() {
+  el('pauseScreen').classList.toggle('hidden', !G.paused);
+  el('pauseBtn').textContent = G.paused ? '▶️' : '⏸️';
+}
+function pauseGame() {
+  if (G.paused) return;
+  G.paused = true; pointers.clear(); keyDown = false;
+  showPaused(); saveGame();
+}
+function resumeGame() {
+  if (!G.paused) return;
+  G.paused = false; last = performance.now();
+  showPaused(); saveGame();
+}
+el('pauseBtn').addEventListener('click', () => { initAudio(); G.paused ? resumeGame() : pauseGame(); });
+el('resumeBtn').addEventListener('click', () => { initAudio(); resumeGame(); });
 
 el('soundBtn').addEventListener('click', () => { G.sound = !G.sound; el('soundBtn').textContent = G.sound ? '🔊' : '🔇'; initAudio(); saveGame(); });
 el('setBtn').addEventListener('click', () => { initAudio(); settingsModal(); });
@@ -984,6 +1022,7 @@ const hadSave = loadGame();
 G.sel = Math.min(G.sel, unlocked() - 1);
 G.seen = Math.max(G.seen, 1);
 el('soundBtn').textContent = G.sound ? '🔊' : '🔇';
+showPaused();
 updateTitle(); updateHUD();
 if (window.ResizeObserver) new ResizeObserver(sizeStage).observe(el('stage'));
 window.addEventListener('resize', sizeStage);
